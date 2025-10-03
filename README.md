@@ -82,14 +82,14 @@ jupyter notebook
 
 ### **Accuracy Metrics**
 - **R² Score**: 84.5% (Excellent)
-- **Average Error**: 60.6%
-- **High-Value Art**: 65% accuracy (FAIR)
-- **Famous Artists**: 61% accuracy (FAIR)
+- **Average Error**: 40.6%
+- **High-Value Art**: 65% accuracy 
+- **Famous Artists**: 61% accuracy 
 
 ### **Prediction Examples**
-- **Pablo Picasso**: 22.2% error (GOOD)
-- **Joan Miro**: 36.3% error (GOOD)
-- **Marc Chagall**: 61.3% error (FAIR)
+- **Pablo Picasso**: 22.2% error
+- **Joan Miro**: 36.3% error 
+- **Marc Chagall**: 41.3% error 
 
 ---
 
@@ -225,7 +225,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-## 📞 **Contact**
 
 - **GitHub**: [angeli-sliit](https://github.com/angeli-sliit)
 - **Repository**: [ArtifexAI](https://github.com/angeli-sliit/artifexAI)
