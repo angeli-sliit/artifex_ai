@@ -1,6 +1,0 @@
-auction_results_color_svd.csv (text/csv) 1633499 bytes.
-auction_results_color.csv (text/csv) 1370698 bytes.
-auction_results_no_img.csv (text/csv) 664329 bytes.
-auction_results_svd.csv (text/csv) 1370761 bytes.
-results_2024_05_11.ods (application/vnd.oasis.opendocument.spreadsheet) 44289189 bytes.
-results_2024_05_11.xlsx (application/zip) 58334203 bytes.
