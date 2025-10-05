@@ -11,6 +11,7 @@ import os
 import io
 import time
 import json
+import base64
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple, Optional
 
@@ -29,9 +30,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+def resolve_api_base() -> str:
+    """Resolve API base URL with proper fallback handling for Hugging Face Spaces"""
+    # Prefer Streamlit secrets if present, otherwise env var, otherwise empty
+    try:
+        base = st.secrets.get("API_BASE_URL", "")
+    except Exception:
+        base = ""
+    if not base:
+        base = os.getenv("API_BASE_URL", "")
+    base = (base or "").strip().rstrip("/")
+    
+    # Force empty if it's localhost (common HF Spaces issue)
+    if base and "localhost" in base:
+        print(f"DEBUG: Ignoring localhost URL: {base}")
+        base = ""
+    
+    return base
+
 @dataclass
 class FrontendConfig:
-    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000")
+    API_BASE_URL: str = resolve_api_base()
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_IMAGE_TYPES: tuple[str, ...] = ("image/jpeg", "image/png", "image/jpg")
     REQUEST_TIMEOUT: int = 30
@@ -40,12 +59,37 @@ class FrontendConfig:
 
 config = FrontendConfig()
 
-API = {
-    "health": f"{config.API_BASE_URL}/health",
-    "predict": f"{config.API_BASE_URL}/predict",
-    "analyze_image": f"{config.API_BASE_URL}/analyze-image",
-    "model_info": f"{config.API_BASE_URL}/model/info",
-}
+# Debug logging
+if config.API_BASE_URL:
+    print(f"DEBUG: Backend configured: {config.API_BASE_URL}")
+else:
+    print("DEBUG: Starting in standalone mode (no backend configured)")
+
+def get_api_urls(base: str) -> Dict[str, str]:
+    """Generate API URLs with proper handling of empty base URL"""
+    if not base or base.strip() == "":
+        return {}
+    return {
+        "health": f"{base}/health",
+        "predict": f"{base}/predict",
+        "analyze_image": f"{base}/analyze-image",
+        "model_info": f"{base}/model/info",
+    }
+
+API = get_api_urls(config.API_BASE_URL)
+
+def get_starry_night_base64():
+    """Convert The Starry Night image to base64 for embedding"""
+    try:
+        image_path = "img/night.jpg"
+        if os.path.exists(image_path):
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode()
+        else:
+            # Fallback: return empty string if image not found
+            return ""
+    except Exception:
+        return ""
 
 # Optional PDF export - ReportLab is installed and working
 REPORTLAB = True
@@ -113,7 +157,10 @@ html, body { background: linear-gradient(180deg,var(--bg-1),var(--bg-2)); }
     radial-gradient(60rem 60rem at -10% -10%, rgba(96,165,250,.18) 0%, transparent 40%),
     radial-gradient(60rem 60rem at 110% 110%, rgba(34,211,238,.18) 0%, transparent 40%),
     linear-gradient(135deg, rgba(59,130,246,.25), rgba(162,59,114,.35)),
-    var(--hero, #111827);
+    url('img/night.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: var(--shadow);
 }
@@ -335,6 +382,104 @@ html, body { background: linear-gradient(180deg,var(--bg-1),var(--bg-2)); }
   color: #9fb0c7;
   font-style: italic;
 }
+
+/* CM-perfect hero (scoped) */
+.hero-cm {
+  width: 20cm;                /* gradient box width  */
+  height: 10cm;               /* gradient box height */
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  /* 3) Gradient background (bottom layer) */
+  background:
+    radial-gradient(60rem 60rem at -10% -10%, rgba(96,165,250,.18) 0%, transparent 40%),
+    radial-gradient(60rem 60rem at 110% 110%, rgba(34,211,238,.18) 0%, transparent 40%),
+    linear-gradient(135deg, rgba(59,130,246,.25), rgba(162,59,114,.35));
+}
+
+/* New centered container with 8cm width and 18cm height */
+.hero-new {
+  width: 8cm;                 /* 8cm width */
+  height: 18cm;               /* 18cm height */
+  margin: 0 auto;             /* center align */
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  z-index: 2;                 /* appear above other elements */
+  /* Night image background with blue-purple gradient overlay */
+  background:
+    radial-gradient(60rem 60rem at -10% -10%, rgba(96,165,250,.18) 0%, transparent 40%),
+    radial-gradient(60rem 60rem at 110% 110%, rgba(34,211,238,.18) 0%, transparent 40%),
+    linear-gradient(135deg, rgba(59,130,246,.25), rgba(162,59,114,.35)),
+    url('img/night.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Outer container that wraps the hero section - larger than the image */
+.outer-hero-wrapper {
+  padding: 40px;              /* Large padding around the hero */
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(55, 48, 163, 0.8), rgba(79, 70, 229, 0.7));  /* Dark blue-purple gradient */
+  border-radius: 24px;        /* Larger border radius */
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 15px 50px rgba(0,0,0,.4);
+  margin: 30px auto;          /* Center and add vertical margin */
+  max-width: 1400px;          /* Larger max width */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-cm .hero-pic {
+  /* 2) Picture layer — 19×9 cm, centered */
+  position: absolute;
+  top: 0.5cm;                 /* gap from the top */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 19cm;
+  height: 9cm;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  z-index: 2;
+}
+
+.hero-cm .hero-info {
+  /* 1) Information box — sits above picture */
+  position: relative;
+  z-index: 3;
+  text-align: center;
+  color: #eaeaea;
+  /* push content below the image footprint (0.5cm + 9cm + 0.2cm) */
+  padding-top: calc(0.5cm + 9cm + 0.2cm);
+  padding-left: 0.6cm;
+  padding-right: 0.6cm;
+}
+
+.hero-cm .pill {
+  display:inline-flex; gap:.5rem; align-items:center;
+  padding:.5rem .9rem; border-radius:999px;
+  border:1px solid rgba(255,255,255,.15);
+  color:#dbeafe; background:rgba(59,130,246,.18);
+}
+.hero-cm h1 { margin: 8px 0 10px; font-size: clamp(22px, 3.2vw, 34px); line-height: 1.15; color:#fff; }
+.hero-cm p  { margin: 0 auto; max-width: 18cm; font-size: 15px; opacity:.95; }
+
+/* Gentle responsive scale for narrow viewports so cm layout doesn't overflow */
+@media (max-width: 1200px){
+  .hero-cm { transform: scale(.85); transform-origin: top center; }
+}
+@media (max-width: 900px){
+  .hero-cm { transform: scale(.72); }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -400,15 +545,18 @@ def validate_form_inputs(artist: str, year: int, width: float, height: float,
 
 def analyze_image(uploaded_file) -> Dict[str, Any]:
     """Analyze image with retry mechanism and better user feedback"""
+    if not config.API_BASE_URL:
+        return {"success": False, "error": "No backend configured (Demo Mode). Set API URL in sidebar to enable image analysis."}
+    
     for attempt in range(config.RETRY_ATTEMPTS):
         try:
             uploaded_file.seek(0)
             files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
-
+            
             # Show retry attempt info
             if attempt > 0:
                 st.info(f"🔄 Retry attempt {attempt + 1}/{config.RETRY_ATTEMPTS}...")
-
+            
             r = requests.post(API["analyze_image"], files=files, timeout=config.REQUEST_TIMEOUT)
 
             if r.status_code == 200:
@@ -434,17 +582,20 @@ def analyze_image(uploaded_file) -> Dict[str, Any]:
 
         except Exception as e:
             return {"success": False, "error": f"Unexpected error: {str(e)}"}
-
+    
     return {"success": False, "error": "Failed after multiple attempts."}
 
 def predict_price(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Predict price with retry mechanism and better user feedback"""
+    if not config.API_BASE_URL:
+        return {"success": False, "error": "No backend configured (Demo Mode). Set API URL in sidebar to get price predictions."}
+    
     for attempt in range(config.RETRY_ATTEMPTS):
         try:
             # Show retry attempt info
             if attempt > 0:
                 st.info(f"🔄 Retry attempt {attempt + 1}/{config.RETRY_ATTEMPTS}...")
-
+            
             r = requests.post(API["predict"], json=payload, timeout=config.REQUEST_TIMEOUT)
 
             if r.status_code == 200:
@@ -468,7 +619,7 @@ def predict_price(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         except Exception as e:
             return {"success": False, "error": f"Unexpected error: {str(e)}"}
-
+    
     return {"success": False, "error": "Failed after multiple attempts."}
 
 def calculate_title_word_count(title: str) -> int:
@@ -895,29 +1046,40 @@ def navbar():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def hero():
-    st.markdown(
-        f"""
-        <div class="hero" style="--hero:{config.HERO_IMAGE}">
-          <div class="glass" style="padding:32px; text-align:center; max-width:950px;">
-            <span class="pill">🧠 AI-Powered • 🎨 Art Valuation • 📈 Evidence-based</span>
-            <h1>Accurate, Explainable Art Price Predictions</h1>
-            <p>Upload an image, enter key details, and receive a fair-value estimate with a confidence range.
-               Built with image features (Colorfulness, SVD Entropy), rich metadata, and robust statistical priors.</p>
+    # Get the night image as base64 for embedding
+    night_b64 = get_starry_night_base64() or ""
+    
+    # Create the HTML content
+    hero_html = f"""
+    <div class="hero" style="position: relative; min-height: 70vh; display: flex; align-items: center; justify-content: center; background-image: radial-gradient(60rem 60rem at -10% -10%, rgba(96,165,250,.18) 0%, transparent 40%), radial-gradient(60rem 60rem at 110% 110%, rgba(34,211,238,.18) 0%, transparent 40%), linear-gradient(135deg, rgba(59,130,246,.25), rgba(162,59,114,.35)), {'url(data:image/jpeg;base64,' + night_b64 + ')' if night_b64 else 'url(img/night.jpg)'}; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 18px; border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 60px rgba(0,0,0,.35); width: calc(100% + 4cm);">
+        <div style="max-width: 1100px; width: 100%; padding: 24px;">
+            <div class="glass" style="padding: 28px; border-radius: 20px; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 60px rgba(0,0,0,.35); backdrop-filter: blur(10px); background: linear-gradient(180deg, rgba(17,24,39,.85), rgba(15,23,42,.75));">
+                <div style="text-align: center; max-width: 900px; margin: 0 auto;">
+                    <span class="pill">🧠 AI-Powered • 🎨 Art Valuation • 📈 Evidence-based</span>
+                    <h1 style="margin: .5rem 0 .25rem; font-weight: 800; color: white; font-size: 3.5rem;">Accurate, Explainable Art Price Predictions</h1>
+                    <p style="color: #cbd5e1; margin-bottom: 20px; font-size: 1.15rem; max-width: 720px; margin-left: auto; margin-right: auto;">
+                        Upload an image, enter key details, and receive a fair-value estimate with a confidence range.
+                        Built with image features (Colorfulness, SVD Entropy), rich metadata, and robust statistical priors.
+                    </p>
+                    <div style="margin-top: 20px;">
+                        <a href="?goto=predict" style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); transition: all 0.3s ease;">🚀 Start Prediction</a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """
+    
+    # Wrap the hero content in the outer container
+    wrapped_hero_html = f"""
+    <div class="outer-hero-wrapper">
+        {hero_html}
+    </div>
+    """
+    
+    st.markdown(wrapped_hero_html, unsafe_allow_html=True)
 
-    # Centered big red CTA under the hero (HTML link -> query param)
-    st.markdown(
-        """
-        <div class="hero-cta">
-          <a class="hero-cta-btn" href="?goto=predict">🚀 Start Prediction</a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+
 
 # Removed complex JavaScript navigation - using simple Streamlit buttons instead
 
@@ -1281,14 +1443,14 @@ def predict_page():
                             st.rerun()  # ← forces the number inputs to refresh with new values
                         else:
                             st.error(f"❌ Analysis failed: {res.get('error')}")
-                
+            
             with btn_col2:
                 # Clear Image Button
                 if st.button("🗑️ Clear Image", use_container_width=True, key="clear_img"):
                     clear_image_state()
                     st.success("✅ Image cleared successfully!")
                     st.rerun()
-                
+            
             with btn_col3:
                 # Change Image Button
                 if st.button("🔄 Change Image", use_container_width=True, key="change_img"):
@@ -1435,7 +1597,7 @@ def predict_page():
 def results_page():
     data = st.session_state.get("prediction") or {}
     inputs = st.session_state.get("inputs") or {}
-        
+
     if not data:
         st.info("No prediction available yet.")
         if st.button("Start a Prediction", use_container_width=True):
@@ -1545,16 +1707,16 @@ def results_page():
         <span class="badge conf">CONFIDENCE: {str(confidence).upper()}</span>
         <span class="badge model">Model: {model_type}</span>
         <span class="badge feats">Features used: {features_used}</span>
-      </div>
+          </div>
 
       <div class="range">
         <span class="min">{fmt_money(lo)}</span>
         <span class="max">{fmt_money(hi)}</span>
         <div class="star" style="left:{pos_pct}%;">★</div>
-      </div>
+          </div>
 
       <div class="range-label">Range: {fmt_money(lo)} – {fmt_money(hi)}</div>
-    </div>
+        </div>
     """, unsafe_allow_html=True)
 
     # ---------- centered artwork image ----------
@@ -1586,7 +1748,7 @@ def results_page():
                 <div style="font-size:1.2rem;font-weight:700;color:#60A5FA;margin-bottom:8px;">Confidence Level</div>
                 <div style="font-size:2rem;font-weight:800;color:#e5e7eb;">{data.get('confidence', 'UNKNOWN').upper()}</div>
                 <div style="font-size:0.9rem;color:#9fb0c7;margin-top:4px;">Prediction Reliability</div>
-            </div>
+      </div>
             """,
             unsafe_allow_html=True
         )
@@ -1598,7 +1760,7 @@ def results_page():
                 <div style="font-size:1.2rem;font-weight:700;color:#60A5FA;margin-bottom:8px;">Artist Popularity</div>
                 <div style="font-size:2rem;font-weight:800;color:#e5e7eb;">{data.get('artist_popularity', 'UNKNOWN').upper()}</div>
                 <div style="font-size:0.9rem;color:#9fb0c7;margin-top:4px;">Market Recognition</div>
-            </div>
+    </div>
             """,
             unsafe_allow_html=True
         )
@@ -1721,9 +1883,9 @@ def results_page():
             ),
             unsafe_allow_html=True
         )
-    
+
     st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
-    
+
     # Market insights section
     st.markdown("### 💡 Market Insights & Recommendations")
     
@@ -1774,23 +1936,23 @@ def results_page():
 
     # Export
     st.subheader("📄 Export")
-    
+
     
     cL, cR = st.columns([2, 1])
 
     with cL:
         # Text fallback always available
         txt_lines = [
-            f"Artist: {inputs.get('artist','')}",
-            f"Title: {inputs.get('title','')}",
-            f"Year: {inputs.get('year','')}",
-            f"Technique: {inputs.get('technique','')}",
-            f"Signature: {inputs.get('signature','')}",
-            f"Predicted Price: {fmt_money(pred)}",
-            f"Estimated Range: {rng_text}",
-            f"Confidence: {data.get('confidence','—')}",
-            f"Model: {data.get('model_type','CatBoost')}",
-        ]
+        f"Artist: {inputs.get('artist','')}",
+        f"Title: {inputs.get('title','')}",
+        f"Year: {inputs.get('year','')}",
+        f"Technique: {inputs.get('technique','')}",
+        f"Signature: {inputs.get('signature','')}",
+        f"Predicted Price: {fmt_money(pred)}",
+        f"Estimated Range: {rng_text}",
+        f"Confidence: {data.get('confidence','—')}",
+        f"Model: {data.get('model_type','CatBoost')}",
+    ]
         st.download_button(
             "📥 Download Text Report",
             data="\n".join(txt_lines).encode("utf-8"),
@@ -1807,11 +1969,11 @@ def results_page():
 
                 if pdf_bytes and len(pdf_bytes) > 0:
                     st.download_button(
-                        "📄 Download PDF",
-                        data=pdf_bytes,
+                    "📄 Download PDF",
+                    data=pdf_bytes,
                         file_name=f"artifexai_prediction_{inputs.get('artist','unknown').replace(' ','_')}.pdf",
-                        mime="application/pdf",
-                        type="primary",
+                    mime="application/pdf",
+                    type="primary",
                         use_container_width=True,
                         help="Download a professional PDF report with all prediction details"
                     )
@@ -1819,12 +1981,10 @@ def results_page():
                     st.error("❌ Failed to generate PDF - empty content")
                     st.info("📄 Please try again or contact support if the issue persists.")
             except Exception as e:
-                st.error(f"❌ Error generating PDF: {str(e)[:100]}...")
+                st.error(f"❌ PDF generation failed: {str(e)}")
                 st.info("📄 Please try again or contact support if the issue persists.")
-                st.caption(f"Debug: ReportLab={REPORTLAB}, Error type: {type(e).__name__}")
         else:
-            st.warning("⚠️ PDF export requires ReportLab library")
-            st.info("📄 Install `reportlab` to enable PDF downloads: `pip install reportlab>=4.0.0`")
+            st.info("📄 PDF export is disabled. Install **reportlab**: `pip install reportlab`")
 
     st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
@@ -1853,22 +2013,33 @@ def main():
         api_url = st.text_input(
             "Backend API Base URL", 
             value=config.API_BASE_URL,
-            help="Enter the base URL for the backend API (e.g., http://localhost:8000)"
+            help="Enter the base URL for the backend API (e.g., http://localhost:8000). Leave empty to run without backend."
         )
         
         # Validate URL format
-        if api_url.strip() and api_url.strip() != config.API_BASE_URL:
-            if not api_url.strip().startswith(("http://", "https://")):
+        if api_url.strip() != config.API_BASE_URL:
+            if api_url.strip() == "":
+                config.API_BASE_URL = ""
+                API.update(get_api_urls(""))
+                st.success("✅ Running in standalone mode (no backend)")
+                st.rerun()  # Force refresh to update the UI
+            elif not api_url.strip().startswith(("http://", "https://")):
                 st.error("❌ URL must start with http:// or https://")
             else:
-                config.API_BASE_URL = api_url.strip()
-                API["health"] = f"{config.API_BASE_URL}/health"
-                API["predict"] = f"{config.API_BASE_URL}/predict"
-                API["analyze_image"] = f"{config.API_BASE_URL}/analyze-image"
-                API["model_info"] = f"{config.API_BASE_URL}/model/info"
+                config.API_BASE_URL = api_url.strip().rstrip("/")
+                API.update(get_api_urls(config.API_BASE_URL))
                 st.success("✅ API URL updated!")
+                st.rerun()  # Force refresh to update the UI
         
-        st.caption("Leave empty to keep the default. The app will still render without a backend.")
+        st.caption("💡 **Demo Mode**: Leave empty to explore the UI without backend predictions.")
+        
+        # Add a button to clear the API URL
+        if config.API_BASE_URL and config.API_BASE_URL.strip() != "":
+            if st.button("🗑️ Clear API URL (Demo Mode)", help="Remove backend configuration to run in demo mode"):
+                config.API_BASE_URL = ""
+                API.update(get_api_urls(""))
+                st.success("✅ Switched to demo mode!")
+                st.rerun()
 
         st.markdown("---")
         st.caption("Tip: Analyze image to auto-fill image features (Colorfulness, SVD Entropy).")
@@ -1876,23 +2047,41 @@ def main():
         # Show current API status
         st.markdown("---")
         st.subheader("API Status")
-        try:
-            import requests
-            response = requests.get(API["health"], timeout=5)
-            if response.status_code == 200:
-                st.success("✅ Backend connected")
-            else:
-                st.warning("⚠️ Backend responding with errors")
-        except Exception as e:
-            st.error(f"❌ Backend not available: {str(e)[:50]}...")
+        if not config.API_BASE_URL:
+            st.info("🔧 **Standalone Mode** - No backend configured")
+            st.caption("The app is running in demo mode. You can explore the UI and see how predictions would work.")
+        else:
+            try:
+                import requests
+                response = requests.get(API["health"], timeout=5)
+                if response.status_code == 200:
+                    st.success("✅ Backend connected")
+                else:
+                    st.warning("⚠️ Backend responding with errors")
+            except Exception as e:
+                st.error(f"❌ Backend not available: {str(e)[:50]}...")
         
         # Show current configuration
         st.markdown("---")
         st.subheader("Current Config")
-        st.text(f"API Base: {config.API_BASE_URL}")
+        api_display = config.API_BASE_URL if config.API_BASE_URL else "Not configured (Demo Mode)"
+        st.text(f"API Base: {api_display}")
         st.text(f"Max File Size: {config.MAX_FILE_SIZE//(1024*1024)}MB")
         st.text(f"Retry Attempts: {config.RETRY_ATTEMPTS}")
         st.text(f"ReportLab Available: {REPORTLAB}")
+        
+        # Debug information
+        st.markdown("---")
+        st.subheader("Debug Info")
+        env_var = os.getenv("API_BASE_URL")
+        st.text(f"Environment API_BASE_URL: {env_var if env_var else 'Not set'}")
+        try:
+            secrets_var = st.secrets.get("API_BASE_URL", "Not set")
+        except Exception:
+            secrets_var = "Not available"
+        st.text(f"Streamlit Secrets API_BASE_URL: {secrets_var}")
+        st.text(f"Resolved API_BASE_URL: {config.API_BASE_URL if config.API_BASE_URL else 'Empty (Demo Mode)'}")
+        st.text(f"App Version: v2.2 (HF Spaces Fixed)")
         
         # PDF Status
         st.markdown("---")
@@ -1910,7 +2099,7 @@ def main():
         st.session_state.page = "predict"
         # optional: clear the param so refreshes don't bounce you back
         try:
-            st.query_params.clear()
+            del st.query_params["goto"]
         except Exception:
             pass
 
