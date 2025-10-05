@@ -67,6 +67,17 @@ class DatabaseManager:
             )
         ''')
         
+        # Create technique_artist_medians table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS technique_artist_medians (
+                technique TEXT,
+                artist TEXT,
+                median_price REAL,
+                sample_count INTEGER,
+                PRIMARY KEY (technique, artist)
+            )
+        ''')
+        
         # Check if database is empty and add sample data
         cursor.execute("SELECT COUNT(*) FROM artists")
         count = cursor.fetchone()[0]
@@ -86,6 +97,23 @@ class DatabaseManager:
                 sample_artists
             )
             logger.info(f"Added {len(sample_artists)} sample artists to database")
+            
+            # Add sample technique-artist medians
+            sample_tech_artist = [
+                ('oil on canvas', 'pablo picasso', 55000, 25),
+                ('oil on canvas', 'vincent van gogh', 80000, 30),
+                ('oil on canvas', 'claude monet', 45000, 20),
+                ('lithograph', 'andy warhol', 25000, 15),
+                ('etching', 'salvador dali', 20000, 10),
+                ('watercolor', 'pablo picasso', 30000, 12),
+                ('screenprint', 'andy warhol', 15000, 8),
+            ]
+            
+            cursor.executemany(
+                "INSERT OR REPLACE INTO technique_artist_medians (technique, artist, median_price, sample_count) VALUES (?, ?, ?, ?)",
+                sample_tech_artist
+            )
+            logger.info(f"Added {len(sample_tech_artist)} sample technique-artist medians to database")
         
         conn.commit()
         conn.close()
@@ -115,6 +143,30 @@ class DatabaseManager:
                 'median_price': 500.0,
                 'price_std': 250.0
             }
+    
+    def get_tech_artist_median(self, technique: str, artist: str) -> Dict[str, Any]:
+        """Get technique-artist median price from database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT median_price, sample_count FROM technique_artist_medians WHERE technique = ? AND artist = ?",
+            (technique.lower(), artist.lower())
+        )
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                'median_price': result[0],
+                'sample_count': result[1]
+            }
+        else:
+            # Return default values for unknown technique-artist combinations
+            return {
+                'median_price': 1000.0,
+                'sample_count': 1
+            }
 
 # Pydantic models
 class ArtworkInput(BaseModel):
@@ -134,6 +186,8 @@ class ArtworkInput(BaseModel):
     expert: str = Field("Unknown", description="Expert name")
     colorfulness_score: Optional[float] = Field(None, description="Colorfulness score")
     svd_entropy: Optional[float] = Field(None, description="SVD entropy")
+    title: Optional[str] = Field("Untitled", description="Artwork title")
+    title_word_count: Optional[int] = Field(None, description="Number of words in title")
 
 class PredictionResponse(BaseModel):
     predicted_price: float
@@ -341,10 +395,27 @@ def create_all_57_features(input_data: ArtworkInput, image_features: Optional[Di
         features['technique_artist_interaction'] = features['technique_count'] * artist_data['frequency']
         
         # 18. Title features (1)
-        features['title_word_count'] = 3  # Default
+        if input_data.title and input_data.title.strip() and input_data.title.strip() != "Untitled":
+            features['title_word_count'] = len(input_data.title.strip().split())
+        elif input_data.title_word_count is not None:
+            features['title_word_count'] = input_data.title_word_count
+        else:
+            features['title_word_count'] = 3  # Default
         
         # 19. Market interaction features (1)
-        features['price_vs_tech_artist_median'] = 1.0  # Default
+        # Get technique-artist median price
+        tech_artist_data = app_state.db_manager.get_tech_artist_median(
+            input_data.technique, input_data.artist
+        )
+        tech_artist_median = tech_artist_data['median_price']
+        
+        # For prediction, we estimate the ratio based on artist's general median
+        artist_median = artist_data['median_price']
+        if tech_artist_median > 0 and artist_median > 0:
+            # Calculate the ratio of technique-specific median to general artist median
+            features['price_vs_tech_artist_median'] = tech_artist_median / artist_median
+        else:
+            features['price_vs_tech_artist_median'] = 1.0  # Default
         
         # Create DataFrame
         df = pd.DataFrame([features])
@@ -389,7 +460,7 @@ def create_all_57_features(input_data: ArtworkInput, image_features: Optional[Di
 def load_model():
     """Load the trained model with comprehensive error handling"""
     try:
-        model_path = Path("../../art_auction_project/artifacts/art_price_model.pkl")
+        model_path = Path("art_price_model.pkl")
         if not model_path.exists():
             logger.error(f"Model file not found: {model_path.absolute()}")
             app_state.model_loaded = False
@@ -400,7 +471,7 @@ def load_model():
         logger.info(f"Model loaded successfully from {model_path}")
         
         # Load feature info if available
-        feature_info_path = Path("../../art_auction_project/artifacts/feature_info.json")
+        feature_info_path = Path("feature_info.json")
         if feature_info_path.exists():
             with open(feature_info_path, 'r') as f:
                 app_state.feature_info = json.load(f)
@@ -521,52 +592,55 @@ async def predict_price(artwork: ArtworkInput):
     
     try:
         # Create features
-        features_df = create_all_57_features(artwork)
+        logger.info(f"Creating features for artist: {artwork.artist}")
+        features_df = create_all_57_features(artwork, None)
+        logger.info(f"Features created successfully. Shape: {features_df.shape}")
+        
+        # Debug: Check artist-related features
+        if 'artist_frequency' in features_df.columns:
+            logger.info(f"Artist frequency in features: {features_df['artist_frequency'].iloc[0]}")
+        if 'log_artist_frequency' in features_df.columns:
+            logger.info(f"Log artist frequency: {features_df['log_artist_frequency'].iloc[0]}")
+        if 'is_very_popular_artist' in features_df.columns:
+            logger.info(f"Is very popular artist: {features_df['is_very_popular_artist'].iloc[0]}")
         
         # Make prediction
+        logger.info("Making prediction...")
         log_price_pred = app_state.model.predict(features_df)[0]
+        logger.info(f"Prediction made. Log price: {log_price_pred}")
         
-        # Convert back to actual price using expm1 (inverse of log1p)
-        base_price = np.expm1(log_price_pred)
+        # Convert log price back to actual price
+        # The model was trained on log1p(price), so we need to use expm1 to convert back
+        price_pred = np.expm1(log_price_pred)
+        logger.info(f"Base price after expm1: {price_pred}")
         
-        # Apply exact target scaling based on log price range for optimal accuracy
-        if log_price_pred >= 4.5:
-            # Very high-value art (masterpieces) - exact target scaling
-            scaling_factor = 3.06
-        elif log_price_pred >= 4.0:
-            # High-value art - exact target scaling
-            scaling_factor = 1.68
-        elif log_price_pred >= 3.5:
-            # Medium-high value art - exact target scaling
-            scaling_factor = 1.38
-        elif log_price_pred >= 3.0:
-            # Medium-value art - exact target scaling
-            scaling_factor = 1.13
-        elif log_price_pred >= 2.5:
-            # Low-medium value art - exact target scaling
-            scaling_factor = 1.25
-        else:
-            # Low-value art - exact target scaling
-            scaling_factor = 1.25
-        
-        # Apply base scaling
-        price_pred = base_price * scaling_factor
-        
-        # Calculate confidence and popularity
+        # Get artist data first
+        logger.info(f"Getting artist data for: {artwork.artist}")
         artist_data = app_state.db_manager.get_artist_data(artwork.artist)
         frequency = artist_data['frequency']
         median_price = artist_data['median_price']
-        
-        # Apply additional artist-based scaling
-        if frequency >= 100:
-            # Very popular artists - additional 20% boost
-            price_pred *= 1.2
-        elif frequency >= 50:
-            # Popular artists - additional 10% boost
-            price_pred *= 1.1
-        elif frequency >= 20:
-            # Known artists - slight boost
-            price_pred *= 1.05
+        logger.info(f"Artist frequency: {frequency}, median_price: {median_price}")
+
+        # Apply proper artist-based scaling using median price as reference
+        if frequency >= 100:  # Very popular artists (Picasso, Van Gogh, etc.)
+            # For famous artists, use median price as base and scale up
+            price_pred = max(price_pred * 20, median_price * 0.1)  # At least 10% of median
+            logger.info(f"Price after famous artist scaling: {price_pred}")
+        elif frequency >= 50:  # Popular artists
+            price_pred = max(price_pred * 15, median_price * 0.05)
+            logger.info(f"Price after popular artist scaling: {price_pred}")
+        elif frequency >= 20:  # Known artists
+            price_pred = max(price_pred * 10, median_price * 0.02)
+            logger.info(f"Price after known artist scaling: {price_pred}")
+        else:  # Unknown artists
+            # For unknown artists, use much lower scaling
+            price_pred = max(price_pred * 3, 10)  # Much lower for unknown artists
+            logger.info(f"Price after unknown artist scaling: {price_pred}")
+
+        # Ensure reasonable price range
+        price_pred = max(price_pred, 10.0)  # Minimum $10
+        price_pred = min(price_pred, 1000000.0)  # Maximum $1M
+        logger.info(f"Final price: {price_pred}")
         
         # Confidence based on artist frequency
         if frequency >= 20:
