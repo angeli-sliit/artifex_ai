@@ -1,12 +1,3 @@
-"""
-ArtifexAI Enhanced Frontend — POLISHED SINGLE FILE
-- Clear, modern UI/UX with glassmorphism + subtle gradients
-- Robust session-state (no weird reruns, no duplicate button clashes)
-- Reliable image-feature auto-fill flow
-- Safer API calls (timeouts, messages)
-- Beautiful Results + export (PDF or text)
-"""
-
 import os
 import io
 import time
@@ -32,7 +23,7 @@ st.set_page_config(
 
 @dataclass
 class FrontendConfig:
-    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000")
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "https://angeli2003-artifex-ai.hf.space")
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_IMAGE_TYPES: tuple[str, ...] = ("image/jpeg", "image/png", "image/jpg")
     REQUEST_TIMEOUT: int = 30
@@ -1850,53 +1841,6 @@ def results_page():
 
     st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
-    # Market insights section
-    st.markdown("### 💡 Market Insights & Recommendations")
-    
-    # Generate insights based on the data
-    insights = []
-    
-    # Confidence-based insights
-    confidence = data.get('confidence', 'UNKNOWN').upper()
-    if confidence == 'HIGH':
-        insights.append("✅ High confidence prediction - reliable for valuation purposes")
-    elif confidence == 'MEDIUM':
-        insights.append("⚠️ Medium confidence - consider additional market research")
-    else:
-        insights.append("❓ Low confidence - prediction may vary significantly")
-    
-    # Artist popularity insights
-    artist_pop = data.get('artist_popularity', 'UNKNOWN').upper()
-    if artist_pop in ['HIGH', 'VERY HIGH']:
-        insights.append("🌟 Artist has strong market recognition - premium pricing expected")
-    elif artist_pop == 'MEDIUM':
-        insights.append("📊 Moderate artist recognition - standard market pricing")
-    else:
-        insights.append("🔍 Limited artist data - pricing based on technique and condition")
-    
-    # Technique insights
-    technique = inputs.get('technique', '').lower()
-    if 'oil' in technique:
-        insights.append("🎨 Oil paintings typically command higher prices in auctions")
-    elif 'watercolor' in technique:
-        insights.append("💧 Watercolors may have different market dynamics")
-    elif 'print' in technique or 'lithograph' in technique:
-        insights.append("🖨️ Prints and lithographs follow different pricing patterns")
-    
-    # Condition insights
-    condition = inputs.get('condition', '').lower()
-    if condition in ['excellent', 'very good']:
-        insights.append("✨ Excellent condition enhances market value significantly")
-    elif condition in ['good', 'fair']:
-        insights.append("📝 Good condition - minor restoration may increase value")
-    else:
-        insights.append("🔧 Consider professional restoration to maximize value")
-    
-    # Display insights
-    for insight in insights:
-        st.info(insight)
-    
-    st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
     # Export
     st.subheader("📄 Export")
