@@ -28,8 +28,7 @@ class FrontendConfig:
     ALLOWED_IMAGE_TYPES: tuple[str, ...] = ("image/jpeg", "image/png", "image/jpg")
     REQUEST_TIMEOUT: int = 30
     RETRY_ATTEMPTS: int = 2
-    HERO_IMAGE: str = "url('img/123.jpg')"  # you can swap to a local asset
-
+    HERO_IMAGE: str = "url('img/123.jpg')" 
 config = FrontendConfig()
 
 API = {
